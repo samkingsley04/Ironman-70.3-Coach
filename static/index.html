@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Coach Dashboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <nav class="sidebar">
+      <div class="sidebar-brand">Coach Dashboard</div>
+      <div class="nav-item active" data-page="overview"><span class="nav-icon">&#9679;</span> Overview</div>
+      <div class="nav-item" data-page="training-load"><span class="nav-icon">&#9650;</span> Training Load</div>
+      <div class="nav-item" data-page="activities"><span class="nav-icon">&#9635;</span> Activities</div>
+      <div class="nav-item" data-page="coach-chat"><span class="nav-icon">&#9998;</span> Coach Chat</div>
+      <div class="sidebar-footer">Sunshine Coast 70.3<br />Sept 2027 build</div>
+    </nav>
+
+    <div class="main">
+      <div class="topbar">
+        <div>
+          <h1 id="page-title">Overview</h1>
+          <div class="date" id="page-date"></div>
+        </div>
+        <button class="btn" id="sync-btn">&#8635; Sync</button>
+      </div>
+
+      <!-- OVERVIEW -->
+      <section class="page active" id="page-overview">
+        <div class="stat-grid" id="overview-stats"></div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <span>30-Day Trends</span>
+            <span class="sub">resting HR &middot; HRV &middot; sleep &middot; body battery &middot; stress &middot; steps</span>
+          </div>
+          <div class="chart-grid" id="overview-trends"></div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="panel">
+            <div class="panel-title">
+              <span>Weekly Volume by Sport</span>
+              <span class="sub">last 8 weeks, hours</span>
+            </div>
+            <div id="overview-weekly-volume"></div>
+            <div class="legend" style="margin-top:10px">
+              <span class="legend-item"><span class="legend-dot" style="background:var(--swim)"></span>Swim</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--bike)"></span>Bike</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--run)"></span>Run</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--strength)"></span>Strength</span>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-title">
+              <span>Performance Management (CTL / ATL / TSB)</span>
+              <span class="sub">last 90 days</span>
+            </div>
+            <div id="overview-pmc"></div>
+            <div class="legend" style="margin-top:10px">
+              <span class="legend-item"><span class="legend-dot" style="background:#22d3ee"></span>CTL (fitness)</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#f97316"></span>ATL (fatigue)</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#a78bfa"></span>TSB (form)</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TRAINING LOAD -->
+      <section class="page" id="page-training-load">
+        <div class="panel">
+          <div class="panel-title">
+            <span>Performance Management Chart</span>
+            <div class="range-controls" id="pmc-range-controls">
+              <button class="range-btn" data-days="42">6W</button>
+              <button class="range-btn" data-days="90">90D</button>
+              <button class="range-btn active" data-days="180">Full</button>
+            </div>
+          </div>
+          <div id="training-load-pmc"></div>
+          <div class="legend" style="margin-top:10px">
+            <span class="legend-item"><span class="legend-dot" style="background:#22d3ee"></span>CTL (fitness)</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#f97316"></span>ATL (fatigue)</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#a78bfa"></span>TSB (form)</span>
+          </div>
+        </div>
+
+        <div class="panel" id="blocks-panel" style="display:none">
+          <div class="panel-title">Current Macrocycle Block</div>
+          <div id="blocks-content"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Weekly TSS &amp; Volume</div>
+          <div style="overflow-x:auto">
+            <table class="data-table" id="weekly-tss-table">
+              <thead>
+                <tr>
+                  <th>Week</th>
+                  <th>Total TSS</th>
+                  <th>Hours (S/B/R)</th>
+                  <th>Distance km (S/B/R)</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACTIVITIES -->
+      <section class="page" id="page-activities">
+        <div class="panel">
+          <div class="panel-title">
+            <span>Recent Workouts</span>
+            <span class="sub" id="activities-count"></span>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="data-table" id="activities-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Sport</th>
+                  <th>Name</th>
+                  <th>Duration</th>
+                  <th>Distance</th>
+                  <th>TSS / IF</th>
+                  <th>Avg HR</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- COACH CHAT (full page placeholder; chat itself lives in the dock) -->
+      <section class="page" id="page-coach-chat">
+        <div class="panel">
+          <div class="panel-title">Coach Chat</div>
+          <p style="color:var(--text-dim)">
+            Use the chat panel on the right to talk with your coach — ask about recent performance,
+            plan tomorrow's session, or lay out the next training block. It stays available from any page.
+          </p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <button class="chat-toggle" id="chat-toggle" title="Open coach chat">&#9998;</button>
+
+  <div class="chat-dock" id="chat-dock">
+    <div class="chat-header">
+      <h2>Coach Chat</h2>
+      <button class="chat-close" id="chat-close">&times;</button>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-empty" id="chat-empty">
+        Ask your coach about training, recent trends, or planning.
+        <div class="chat-suggestions">
+          <button class="chat-suggestion" data-q="Why has my HRV been low this week?">Why has my HRV been low this week?</button>
+          <button class="chat-suggestion" data-q="Build me tomorrow's bike workout given my current fatigue.">Build tomorrow's bike workout given my fatigue</button>
+          <button class="chat-suggestion" data-q="Lay out the next 3 months building toward Sunshine Coast 70.3.">Lay out the next 3 months of training</button>
+        </div>
+      </div>
+    </div>
+    <div class="chat-input-row">
+      <textarea id="chat-input" placeholder="Ask your coach..."></textarea>
+      <button class="chat-send" id="chat-send">Send</button>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
