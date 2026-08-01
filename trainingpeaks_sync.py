@@ -28,7 +28,7 @@ import gzip
 import io
 import json
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -83,6 +83,24 @@ def to_our_activity(w: dict) -> dict:
     }
 
 
+def _normalize_timestamps(laps: list[dict], records: list[dict]) -> tuple[list[dict], list[dict]]:
+    """fitparse hands back real datetime objects for timestamp-like fields
+    (record "timestamp", lap "start_time"). Convert every datetime value to
+    seconds elapsed since the session's first record, matching the sample
+    data generator's convention -- everything downstream (metrics.py's
+    duration math, the frontend's timestamp/60-for-elapsed-minutes charts)
+    assumes an elapsed-seconds stream, not wall-clock datetimes. Without
+    this, json.dumps(default=str) would silently stringify them instead."""
+    first_ts = next((r["timestamp"] for r in records if isinstance(r.get("timestamp"), datetime)), None)
+    if first_ts is None:
+        return laps, records
+
+    def convert(d: dict) -> dict:
+        return {k: (v - first_ts).total_seconds() if isinstance(v, datetime) else v for k, v in d.items()}
+
+    return [convert(l) for l in laps], [convert(r) for r in records]
+
+
 def fetch_laps_and_records(client: TrainingPeaksClient, workout_id, device_files: list[dict]):
     """Download + parse the original FIT file for lap/record-level detail.
     Returns ([], []) if unavailable -- callers should treat this as optional
@@ -102,7 +120,7 @@ def fetch_laps_and_records(client: TrainingPeaksClient, workout_id, device_files
         fit = fitparse.FitFile(io.BytesIO(raw))
         laps = [msg.get_values() for msg in fit.get_messages("lap")]
         records = [msg.get_values() for msg in fit.get_messages("record")]
-        return laps, records
+        return _normalize_timestamps(laps, records)
     except Exception as e:
         print(f"    could not fetch/parse raw file for workout {workout_id}: {e}")
         return [], []
@@ -234,13 +252,72 @@ def append_threshold_entry(client: TrainingPeaksClient) -> None:
     print(f"Appended threshold entry for {date.today()} -> data/thresholds.json")
 
 
+def migrate_detail_timestamps() -> None:
+    """One-time local fix for detail files fetched before _normalize_timestamps
+    existed. Those files have "timestamp"/"start_time" as datetime STRINGS
+    (json.dumps's default=str fallback, e.g. "2026-07-29 21:47:08") instead
+    of elapsed seconds, which breaks duration math and chart x-axis labels.
+    Pure local JSON rewrite -- no TrainingPeaks auth or API calls needed, so
+    it doesn't cost anything against the cookie's lifetime or rate limits.
+    Safe to re-run: files already in elapsed-seconds form are left alone.
+    """
+    if not DETAIL_DIR.exists():
+        print("No detail files to migrate.")
+        return
+
+    migrated = 0
+    for path in sorted(DETAIL_DIR.glob("*.json")):
+        detail = json.loads(path.read_text())
+        records = detail.get("records") or []
+        laps = detail.get("laps") or []
+
+        first_dt = None
+        for r in records:
+            ts = r.get("timestamp")
+            if isinstance(ts, str):
+                try:
+                    first_dt = datetime.fromisoformat(ts)
+                except ValueError:
+                    pass
+                break
+
+        if first_dt is None:
+            continue  # already numeric (or already migrated, or no records)
+
+        def convert(d: dict) -> dict:
+            out = dict(d)
+            for key in ("timestamp", "start_time"):
+                v = out.get(key)
+                if isinstance(v, str):
+                    try:
+                        out[key] = (datetime.fromisoformat(v) - first_dt).total_seconds()
+                    except ValueError:
+                        pass
+            return out
+
+        detail["records"] = [convert(r) for r in records]
+        detail["laps"] = [convert(l) for l in laps]
+        save_json(path, detail)
+        migrated += 1
+
+    print(f"Migrated timestamps in {migrated} detail file(s) (already-clean files left untouched).")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--days", type=int, default=90, help="days of activity history to sync (default 90)")
     parser.add_argument("--pmc-days", type=int, default=180, help="days of PMC history to sync (default 180)")
     parser.add_argument("--refresh", action="store_true", help="refetch activity details even if already saved")
     parser.add_argument("--skip-thresholds", action="store_true", help="skip appending a threshold entry")
+    parser.add_argument(
+        "--migrate-timestamps", action="store_true",
+        help="one-time local fix for detail files with datetime-string timestamps (no TP auth needed, exits after running)",
+    )
     args = parser.parse_args()
+
+    if args.migrate_timestamps:
+        migrate_detail_timestamps()
+        return
 
     try:
         client = TrainingPeaksClient()

@@ -16,6 +16,7 @@ stored under "records" / "laps" in data/activities/{id}.json.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 
 # ---------------------------------------------------------------------------
@@ -46,6 +47,28 @@ def _record_value(record: dict, *keys: str) -> float | None:
     return None
 
 
+def parse_timestamp(value) -> float | None:
+    """Normalize a record's timestamp to a plain float for duration math.
+
+    The sample data generator writes elapsed seconds as an int (0, 5, 10...).
+    Real synced data (trainingpeaks_sync.py) normalizes FIT's datetime
+    objects the same way at parse time -- but older/unmigrated detail files
+    on disk may still have the pre-fix string form (JSON's default=str
+    fallback for a datetime, e.g. "2026-07-29 21:47:08"). Handle all three
+    so a stale file degrades gracefully instead of throwing.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
 def compute_decoupling(records: list[dict], min_duration_s: int = 3600) -> dict | None:
     """First-half vs second-half EF, as a percentage.
 
@@ -68,8 +91,8 @@ def compute_decoupling(records: list[dict], min_duration_s: int = 3600) -> dict 
     # 1 Hz (smart recording can skip samples, and our own fake-data generator
     # samples every 5s), so treating record COUNT as seconds silently
     # under-counts duration whenever the sample rate isn't exactly 1 Hz.
-    first_ts = usable[0].get("timestamp")
-    last_ts = usable[-1].get("timestamp")
+    first_ts = parse_timestamp(usable[0].get("timestamp"))
+    last_ts = parse_timestamp(usable[-1].get("timestamp"))
     if first_ts is not None and last_ts is not None and last_ts > first_ts:
         duration_s = last_ts - first_ts
     else:

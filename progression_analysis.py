@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from metrics import compute_durability, efficiency_factor
+from metrics import compute_durability, efficiency_factor, parse_timestamp
 
 DURATIONS_S = [5, 15, 60, 300, 600, 1200, 2400, 3600, 5400]  # 5s,15s,1m,5m,10m,20m,40m,60m,90m
 
@@ -37,7 +37,8 @@ def mean_max_curve_single(records: list[dict], sport: str, durations_s: list[int
         return result
 
     values = [r[output_key] for r in usable]
-    ts_first, ts_last = usable[0].get("timestamp"), usable[-1].get("timestamp")
+    ts_first = parse_timestamp(usable[0].get("timestamp"))
+    ts_last = parse_timestamp(usable[-1].get("timestamp"))
     if ts_first is not None and ts_last is not None and ts_last > ts_first:
         avg_interval = (ts_last - ts_first) / (len(usable) - 1)
     else:
