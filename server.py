@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from progression_analysis import build_progression_summary
 from session_analysis import build_progression_verdict, compute_activity_metrics
 from today_analysis import build_today_summary
 
@@ -109,6 +110,16 @@ def get_today():
         pmc=load_json("pmc.json"),
         activities=load_json("activities.json"),
         plan_config=load_json("plan_config.json"),
+        today=date.today(),
+    )
+
+
+@app.get("/api/progression")
+def get_progression():
+    return build_progression_summary(
+        activities=load_json("activities.json"),
+        load_detail=load_activity_detail,
+        thresholds_history=load_json("thresholds.json"),
         today=date.today(),
     )
 

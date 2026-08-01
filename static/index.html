@@ -11,7 +11,7 @@
     <nav class="sidebar">
       <div class="sidebar-brand">Coach Dashboard</div>
       <div class="nav-item active" data-page="overview"><span class="nav-icon">&#9679;</span> Today</div>
-      <div class="nav-item" data-page="training-load"><span class="nav-icon">&#9650;</span> Training Load</div>
+      <div class="nav-item" data-page="progression"><span class="nav-icon">&#9650;</span> Progression</div>
       <div class="nav-item" data-page="activities"><span class="nav-icon">&#9635;</span> Sessions</div>
       <div class="nav-item" data-page="coach-chat"><span class="nav-icon">&#9998;</span> Coach Chat</div>
       <div class="sidebar-footer">Sunshine Coast 70.3<br />Sept 2027 build</div>
@@ -64,8 +64,65 @@
         </div>
       </section>
 
-      <!-- TRAINING LOAD -->
-      <section class="page" id="page-training-load">
+      <!-- PROGRESSION -->
+      <section class="page" id="page-progression">
+        <div class="panel">
+          <div class="panel-title">
+            <span>Power Curve &mdash; Bike</span>
+            <span class="sub">mean-maximal power, log time scale</span>
+          </div>
+          <div id="progression-power-curve"></div>
+          <div class="legend" style="margin-top:10px">
+            <span class="legend-item"><span class="legend-dot" style="background:#22d3ee"></span>Last 42 days</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#f97316"></span>6 months ago</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#5b6472"></span>All-time best</span>
+          </div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="panel">
+            <div class="panel-title">
+              <span>Durability &mdash; Bike</span>
+              <span class="sub">final vs first 1/3, rides &gt;90min</span>
+            </div>
+            <div id="progression-durability-bike"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">
+              <span>Durability &mdash; Run</span>
+              <span class="sub">final vs first 1/3, runs &gt;90min</span>
+            </div>
+            <div id="progression-durability-run"></div>
+          </div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="panel">
+            <div class="panel-title"><span>EF Trend &mdash; Bike</span><span class="sub">aerobic efforts only</span></div>
+            <div id="progression-ef-bike"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title"><span>EF Trend &mdash; Run</span><span class="sub">aerobic efforts only</span></div>
+            <div id="progression-ef-run"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title"><span>EF Trend &mdash; Swim</span><span class="sub">aerobic efforts only</span></div>
+            <div id="progression-ef-swim"></div>
+            <div class="stat-sub" id="progression-swim-volume-note" style="margin-top:8px"></div>
+          </div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="panel">
+            <div class="panel-title">Current Thresholds</div>
+            <div class="stat-grid" id="progression-thresholds" style="margin-bottom:0"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">Race-Pace Benchmarks</div>
+            <div id="progression-race-pace" class="chat-empty" style="margin:0"></div>
+          </div>
+        </div>
+
         <div class="panel">
           <div class="panel-title">
             <span>Performance Management Chart</span>

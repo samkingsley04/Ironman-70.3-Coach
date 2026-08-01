@@ -14,6 +14,7 @@ const state = {
   weeklySummary: [],
   blocks: [],
   today: null,
+  progression: null,
   chatHistory: [], // [{role, content}]
 };
 
@@ -28,13 +29,14 @@ async function fetchJSON(url) {
 }
 
 async function loadAllData() {
-  const [dailyMetrics, activities, pmc, weeklySummary, blocks, today] = await Promise.all([
+  const [dailyMetrics, activities, pmc, weeklySummary, blocks, today, progression] = await Promise.all([
     fetchJSON("/api/daily-metrics"),
     fetchJSON("/api/activities"),
     fetchJSON("/api/pmc"),
     fetchJSON("/api/weekly-summary"),
     fetchJSON("/api/blocks"),
     fetchJSON("/api/today"),
+    fetchJSON("/api/progression"),
   ]);
   state.dailyMetrics = dailyMetrics;
   state.activities = activities;
@@ -42,6 +44,7 @@ async function loadAllData() {
   state.weeklySummary = weeklySummary;
   state.blocks = blocks;
   state.today = today;
+  state.progression = progression;
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +172,76 @@ function stackedBarSVG(weeks, seriesKeys, colors, opts = {}) {
   let grid = `<line x1="${padL}" y1="${padT}" x2="${width - padR}" y2="${padT}" stroke="#262d3a" stroke-width="1" stroke-dasharray="2,3" />`;
 
   return `<svg class="chart" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">${grid}${bars}${xLabels}</svg>`;
+}
+
+/**
+ * Mean-maximal power/pace curve with a LOG x-axis (duration), since 5s and
+ * 90min points need to share one chart. curveData: {durations_s, all_time_best,
+ * last_42_days, six_months_ago} — any of the three curve objects may be null.
+ */
+function powerCurveChartSVG(curveData) {
+  const width = CHART_W;
+  const height = 220;
+  const padL = 40, padR = 8, padT = 10, padB = 22;
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
+
+  const durations = curveData.durations_s;
+  const seriesDefs = [
+    { key: "all_time_best", color: "#5b6472", dash: "" },
+    { key: "six_months_ago", color: "#f97316", dash: "4,3" },
+    { key: "last_42_days", color: "#22d3ee", dash: "" },
+  ];
+
+  const allVals = [];
+  seriesDefs.forEach((sd) => {
+    const curve = curveData[sd.key];
+    if (!curve) return;
+    durations.forEach((d) => { const v = curve[d]; if (v !== null && v !== undefined) allVals.push(v); });
+  });
+  if (!allVals.length) {
+    return `<div class="chat-empty" style="margin:0">Not enough long-enough sessions with a power stream yet to plot a curve.</div>`;
+  }
+
+  const logMin = Math.log10(durations[0]);
+  const logMax = Math.log10(durations[durations.length - 1]);
+  const xAt = (d) => padL + ((Math.log10(d) - logMin) / (logMax - logMin)) * innerW;
+
+  let min = Math.min(...allVals), max = Math.max(...allVals);
+  const pad = (max - min) * 0.1 || 5;
+  min -= pad;
+  max += pad;
+  const yAt = (v) => padT + innerH - ((v - min) / (max - min)) * innerH;
+
+  let paths = "";
+  seriesDefs.forEach((sd) => {
+    const curve = curveData[sd.key];
+    if (!curve) return;
+    let d = "";
+    durations.forEach((dur) => {
+      const v = curve[dur];
+      if (v === null || v === undefined) return;
+      const cmd = d === "" ? "M" : "L";
+      d += `${cmd}${xAt(dur).toFixed(1)},${yAt(v).toFixed(1)} `;
+    });
+    if (d) paths += `<path d="${d}" fill="none" stroke="${sd.color}" stroke-width="2" ${sd.dash ? `stroke-dasharray="${sd.dash}"` : ""} />`;
+  });
+
+  const gridVals = [min + pad, (min + max) / 2, max - pad];
+  let grid = "";
+  gridVals.forEach((v) => {
+    const y = yAt(v);
+    grid += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${width - padR}" y2="${y.toFixed(1)}" stroke="#262d3a" stroke-width="1" stroke-dasharray="2,3" />`;
+    grid += `<text x="2" y="${(y + 3).toFixed(1)}" class="chart-axis-label">${Math.round(v)}</text>`;
+  });
+
+  const labelFor = (d) => (d < 60 ? `${d}s` : d < 3600 ? `${Math.round(d / 60)}m` : `${round1(d / 3600)}h`);
+  let xLabels = "";
+  durations.forEach((d) => {
+    xLabels += `<text x="${xAt(d).toFixed(1)}" y="${height - 4}" text-anchor="middle" class="chart-axis-label">${labelFor(d)}</text>`;
+  });
+
+  return `<svg class="chart" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">${grid}${paths}${xLabels}</svg>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -355,6 +428,95 @@ function renderTrainingLoad() {
 }
 
 // ---------------------------------------------------------------------------
+// Progression page
+// ---------------------------------------------------------------------------
+
+function renderProgressionPowerCurve() {
+  const curve = state.progression?.power_curve;
+  document.getElementById("progression-power-curve").innerHTML = curve ? powerCurveChartSVG(curve) : "";
+}
+
+function durabilityTrendChart(trend, color) {
+  if (!trend || trend.length < 2) {
+    return `<div class="chat-empty" style="margin:0">Not enough long sessions yet to show a trend.</div>`;
+  }
+  const labels = trend.map((t) => fmtDate(t.date));
+  const series = [{ name: "Fade %", color, values: trend.map((t) => t.fade_pct) }];
+  return lineChartSVG(series, labels, { height: 140, zeroBaseline: true });
+}
+
+function renderProgressionDurability() {
+  const dt = state.progression?.durability_trend || {};
+  document.getElementById("progression-durability-bike").innerHTML = durabilityTrendChart(dt.bike, SPORT_COLOR.bike);
+  document.getElementById("progression-durability-run").innerHTML = durabilityTrendChart(dt.run, SPORT_COLOR.run);
+}
+
+function efTrendChart(trend, color) {
+  if (!trend || trend.length < 2) {
+    return `<div class="chat-empty" style="margin:0">Not enough aerobic sessions logged yet to show a trend.</div>`;
+  }
+  const labels = trend.map((t) => fmtDate(t.date));
+  const series = [{ name: "EF", color, values: trend.map((t) => t.ef) }];
+  return lineChartSVG(series, labels, { height: 140 });
+}
+
+function renderProgressionEF() {
+  const ef = state.progression?.ef_trend || {};
+  document.getElementById("progression-ef-bike").innerHTML = efTrendChart(ef.bike, SPORT_COLOR.bike);
+  document.getElementById("progression-ef-run").innerHTML = efTrendChart(ef.run, SPORT_COLOR.run);
+  document.getElementById("progression-ef-swim").innerHTML = efTrendChart(ef.swim, SPORT_COLOR.swim);
+
+  const swimCheck = state.progression?.swim_volume_check;
+  document.getElementById("progression-swim-volume-note").textContent = swimCheck ? swimCheck.note : "";
+}
+
+function renderProgressionThresholds() {
+  const tt = state.progression?.threshold_trend;
+  const el = document.getElementById("progression-thresholds");
+  const latest = tt?.latest;
+  if (!latest) {
+    el.innerHTML = `<div class="chat-empty" style="margin:0">No threshold entries synced yet.</div>`;
+    return;
+  }
+  const fields = [
+    { key: "ftp", label: "FTP", unit: "W" },
+    { key: "threshold_hr", label: "Threshold HR", unit: "bpm" },
+    { key: "max_hr", label: "Max HR", unit: "bpm" },
+    { key: "resting_hr", label: "Resting HR", unit: "bpm" },
+    { key: "threshold_run_pace_per_km", label: "Threshold Run Pace", unit: "/km" },
+    { key: "css_per_100m", label: "CSS", unit: "/100m" },
+    { key: "weight_kg", label: "Weight", unit: "kg" },
+  ].filter((f) => latest[f.key] !== null && latest[f.key] !== undefined);
+
+  el.innerHTML = fields.map((f) => `
+    <div class="stat-card">
+      <div class="stat-label">${f.label}</div>
+      <div class="stat-value">${latest[f.key]}<span class="stat-unit">${f.unit}</span></div>
+    </div>
+  `).join("") + `
+    <div class="stat-sub" style="grid-column:1/-1">
+      As of ${fmtDate(latest.date)}${tt.has_trend ? "" : " — only one synced entry so far, not enough to trend yet."}
+    </div>
+  `;
+}
+
+function renderProgressionRacePace() {
+  const rp = state.progression?.race_pace_benchmarks;
+  document.getElementById("progression-race-pace").textContent = rp
+    ? rp.note || "No sessions tagged as race-pace efforts yet."
+    : "";
+}
+
+function renderProgression() {
+  renderProgressionPowerCurve();
+  renderProgressionDurability();
+  renderProgressionEF();
+  renderProgressionThresholds();
+  renderProgressionRacePace();
+  renderTrainingLoad(); // PMC + blocks + weekly TSS, folded in from the old Training Load page
+}
+
+// ---------------------------------------------------------------------------
 // Sessions page — list
 // ---------------------------------------------------------------------------
 
@@ -538,7 +700,7 @@ function backToSessionsList() {
 
 const PAGE_TITLES = {
   overview: "Today",
-  "training-load": "Training Load",
+  progression: "Progression",
   activities: "Sessions",
   "coach-chat": "Coach Chat",
 };
@@ -654,7 +816,7 @@ function initChat() {
 async function syncAndRenderAll() {
   await loadAllData();
   renderOverview();
-  renderTrainingLoad();
+  renderProgression();
   renderActivities();
 }
 
