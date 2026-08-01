@@ -18,12 +18,9 @@ Populates:
 Resumable: activity detail files are only (re)fetched if missing, unless
 --refresh is passed. Requests are throttled (see trainingpeaks_client.py).
 
-Known gaps, to refine once run against real data (see inline TODOs):
-  - SPORT_MAP below (TP's workoutTypeValueId -> our sport strings) is a
-    best-guess mapping, not yet verified against a real payload.
-  - append_threshold_entry() stores the raw settings payload as-is; the exact
-    field paths for ftp/threshold_hr/threshold_run_pace_per_km/css_per_100m
-    still need confirming against a real response before we parse them out.
+SPORT_MAP is confirmed against a real account for swim/bike/run/strength
+(1/2/3/9). Other workoutTypeValueId codes (e.g. 13, 100) fall back to
+"other" -- intentionally unmapped, out of scope for this athlete.
 """
 
 import argparse
@@ -48,8 +45,8 @@ except ImportError:
 DATA_DIR = Path(__file__).parent / "data"
 DETAIL_DIR = DATA_DIR / "activities"
 
-# TODO(verify): confirm these against real workoutTypeValueId values before
-# trusting sport classification broadly -- unmapped ids fall back to "other".
+# Confirmed live against a real account. Codes 13/100 (seen but unmapped, out
+# of scope for this athlete) intentionally fall back to "other".
 SPORT_MAP = {
     1: "swim",
     2: "bike",
@@ -83,7 +80,6 @@ def to_our_activity(w: dict) -> dict:
         "if": w.get("ifActual"),
         "normalized_power": w.get("normalizedPowerActual"),
         "description": w.get("description") or "",
-        "device_files": w.get("workoutDeviceFileInfos", []),
     }
 
 
@@ -138,7 +134,7 @@ def sync_activities(client: TrainingPeaksClient, days_back: int, refresh: bool) 
             print(f"    failed to fetch details: {e}")
             continue
 
-        laps, records = fetch_laps_and_records(client, wid, w.get("workoutDeviceFileInfos") or [])
+        laps, records = fetch_laps_and_records(client, wid, details.get("workoutDeviceFileInfos") or [])
 
         save_json(detail_path, {
             "workout_id": wid,
@@ -169,17 +165,71 @@ def sync_pmc(client: TrainingPeaksClient, days_back: int) -> None:
     print(f"Saved {len(out)} days of real PMC -> data/pmc.json")
 
 
+# TP's own workoutTypeId convention (matches SPORT_MAP's keys, confirmed live).
+_WORKOUT_TYPE_ID = {"swim": 1, "bike": 2, "run": 3}
+
+
+def _zone_group_for(zone_groups: list | None, workout_type_id: int):
+    for g in zone_groups or []:
+        if isinstance(g, dict) and g.get("workoutTypeId") == workout_type_id:
+            return g
+    return None
+
+
+def _mps_to_pace_per_km(mps: float | None) -> str | None:
+    if not mps:
+        return None
+    seconds_per_km = 1000 / mps
+    return f"{int(seconds_per_km // 60)}:{round(seconds_per_km % 60):02d}"
+
+
+def _mps_to_pace_per_100m(mps: float | None) -> str | None:
+    if not mps:
+        return None
+    seconds_per_100m = 100 / mps
+    return f"{int(seconds_per_100m // 60)}:{round(seconds_per_100m % 60):02d}"
+
+
+def parse_thresholds(raw_settings: dict) -> dict:
+    """Extract just the athlete's physiological thresholds from TP's settings
+    payload. Deliberately drops every other field the endpoint returns
+    (address, email, phone, birthday, userIdentifierHash, etc.) -- this
+    function is the PII boundary for what actually lands in thresholds.json.
+
+    Field names (workoutTypeId / threshold / zones) come from the zone-group
+    shape used by TP's own zone-update endpoints, not guessed. `threshold` is
+    stored as a speed (m/s) for speed zones, hence the pace conversion below --
+    that unit assumption is the one part of this parser not yet double-checked
+    against a live numeric value, only against the shape.
+    """
+    power_zones = raw_settings.get("powerZones") or []
+    hr_zones = raw_settings.get("heartRateZones") or []
+    speed_zones = raw_settings.get("speedZones") or []
+
+    bike_power = _zone_group_for(power_zones, _WORKOUT_TYPE_ID["bike"])
+    hr_group = _zone_group_for(hr_zones, 0) or (hr_zones[0] if hr_zones else None)
+    run_speed = _zone_group_for(speed_zones, _WORKOUT_TYPE_ID["run"])
+    swim_speed = _zone_group_for(speed_zones, _WORKOUT_TYPE_ID["swim"])
+
+    return {
+        "ftp": bike_power.get("threshold") if bike_power else None,
+        "threshold_hr": hr_group.get("threshold") if hr_group else None,
+        "max_hr": hr_group.get("maxHr") if hr_group else None,
+        "resting_hr": hr_group.get("restingHr") if hr_group else None,
+        "threshold_run_pace_per_km": _mps_to_pace_per_km(run_speed.get("threshold")) if run_speed else None,
+        "css_per_100m": _mps_to_pace_per_100m(swim_speed.get("threshold")) if swim_speed else None,
+        # Not present on this endpoint's payload (checked the real top-level key
+        # list -- no weight field there) -- needs a different endpoint, not yet found.
+        "weight_kg": None,
+    }
+
+
 def append_threshold_entry(client: TrainingPeaksClient) -> None:
     settings = client.get_athlete_settings()
     path = DATA_DIR / "thresholds.json"
     entries = load_json(path, [])
-    entries.append({
-        "date": date.today().isoformat(),
-        # TODO(verify): parse ftp / threshold_hr / max_hr / threshold_run_pace_per_km /
-        # css_per_100m / weight_kg out of the real zone-group shape once seen; keeping
-        # the raw payload for now so nothing is lost.
-        "raw_settings": settings,
-    })
+    entry = {"date": date.today().isoformat(), **parse_thresholds(settings)}
+    entries.append(entry)
     save_json(path, entries)
     print(f"Appended threshold entry for {date.today()} -> data/thresholds.json")
 
