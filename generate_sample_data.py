@@ -2,14 +2,17 @@
 Generates realistic fake training/health data for the Elite Triathlon Coach Dashboard.
 
 This writes the exact JSON files (data/daily_metrics.json, data/activities.json,
-data/pmc.json, data/weekly_summary.json, data/blocks.json) that a future
-Garmin/TrainingPeaks sync script will populate for real. Keep the schema stable.
+data/pmc.json, data/weekly_summary.json, data/blocks.json) and per-activity
+detail files (data/activities/{id}.json, with synthesized "laps"/"records"
+matching real FIT field names) that trainingpeaks_sync.py populates for real.
+Keep the schema stable.
 
 Athlete profile baked into the simulation: elite amateur triathlete, 70.3 PB ~4:30,
 Ironman PB ~10:25, FTP ~285W, run threshold pace ~3:42/km, swim CSS ~1:22/100m.
 Currently in a long base/build buildup toward Sunshine Coast 70.3 (Sept 2027).
 """
 
+import itertools
 import json
 import math
 import random
@@ -101,8 +104,82 @@ def build_week_plan(week_index, num_weeks):
     return phase, round(target_hours, 2)
 
 
+def synthesize_session_detail(sport, intensity, is_long, duration_min, avg_hr, output_avg, is_interval):
+    """Fake per-activity laps/records matching the exact field names real FIT
+    files return (confirmed against a live TrainingPeaks account -- see
+    trainingpeaks_sync.py). Lets the Sessions page's metrics.py calculations
+    (decoupling/durability/rep-fade) run against realistic-shaped data without
+    needing a real sync.
+
+    output_key is "power" for bike (records) / "avg_power" (laps), or
+    "enhanced_speed" / "enhanced_avg_speed" for run and swim.
+    """
+    is_bike = sport == "bike"
+    sample_every_s = 5
+    n_samples = max(4, round(duration_min * 60 / sample_every_s))
+
+    records = []
+    decouple = is_long and duration_min >= 60  # aerobic drift only worth faking on long steady work
+    for i in range(n_samples):
+        frac = i / max(1, n_samples - 1)
+        output = output_avg * (1 + random.uniform(-0.05, 0.05)) if output_avg else None
+        hr = avg_hr * (1 + random.uniform(-0.03, 0.03)) if avg_hr else None
+        if decouple and output is not None and hr is not None:
+            output *= (1 - 0.05 * frac)   # output drifts down ~5% by the end
+            hr *= (1 + 0.035 * frac)      # HR drifts up ~3.5% by the end
+        record = {"timestamp": i * sample_every_s, "heart_rate": round(hr) if hr else None}
+        if is_bike:
+            record["power"] = round(output) if output is not None else None
+            record["cadence"] = round(clamp(85 + random.uniform(-5, 5), 60, 105))
+        else:
+            record["enhanced_speed"] = round(output, 3) if output is not None else None
+            record["cadence"] = round(clamp(82 + random.uniform(-4, 4), 60, 100))
+        records.append(record)
+
+    laps = []
+    if is_interval and output_avg:
+        n_reps = random.choice([4, 5, 6])
+        fade_total_pct = random.uniform(-8, 1)  # negative = faded across reps
+        for rep in range(n_reps):
+            frac = rep / max(1, n_reps - 1)
+            rep_output = output_avg * (1 + fade_total_pct / 100 * frac) * (1 + random.uniform(-0.02, 0.02))
+            rep_hr = avg_hr * (1 + random.uniform(-0.02, 0.03)) if avg_hr else None
+            lap = {
+                "message_index": rep,
+                "start_time": rep * 300,
+                "total_elapsed_time": 240 + random.uniform(-10, 10),
+                "avg_heart_rate": round(rep_hr) if rep_hr else None,
+                "max_heart_rate": round(rep_hr * 1.05) if rep_hr else None,
+            }
+            if is_bike:
+                lap["avg_power"] = round(rep_output)
+                lap["normalized_power"] = round(rep_output * random.uniform(1.0, 1.03))
+            else:
+                lap["enhanced_avg_speed"] = round(rep_output, 3)
+            laps.append(lap)
+    else:
+        # single whole-session lap for steady/easy/recovery sessions
+        lap = {
+            "message_index": 0,
+            "start_time": 0,
+            "total_elapsed_time": duration_min * 60,
+            "avg_heart_rate": round(avg_hr) if avg_hr else None,
+            "max_heart_rate": round(avg_hr * 1.08) if avg_hr else None,
+        }
+        if is_bike and output_avg:
+            lap["avg_power"] = round(output_avg)
+            lap["normalized_power"] = round(output_avg * random.uniform(1.0, 1.05))
+        elif output_avg:
+            lap["enhanced_avg_speed"] = round(output_avg, 3)
+        laps.append(lap)
+
+    return laps, records
+
+
 def gen_activities():
     activities = []
+    activity_details = {}
+    id_counter = itertools.count(1)
     num_weeks = math.ceil(NUM_DAYS / 7) + 1
 
     for week_index in range(num_weeks):
@@ -241,8 +318,10 @@ def gen_activities():
 
                 training_load = round(tss * random.uniform(2.2, 2.9))
                 kudos = round(clamp(tss / 3 + random.uniform(0, 15), 3, 60))
+                activity_id = next(id_counter)
 
                 activities.append({
+                    "id": activity_id,
                     "date": d.isoformat(),
                     "sport": sport,
                     "name": name,
@@ -259,8 +338,28 @@ def gen_activities():
                     "description": desc,
                 })
 
+                if sport == "strength":
+                    laps, records = [], []
+                else:
+                    is_interval = intensity in ("threshold", "vo2") and not is_long
+                    if sport == "bike":
+                        output_avg = avg_power
+                    elif sport == "run":
+                        output_avg = 1000 / pace_s_km
+                    else:  # swim
+                        output_avg = 100 / pace_100
+                    laps, records = synthesize_session_detail(
+                        sport, intensity, is_long, duration_min, avg_hr, output_avg, is_interval
+                    )
+                activity_details[activity_id] = {
+                    "workout_id": activity_id,
+                    "details": {},
+                    "laps": laps,
+                    "records": records,
+                }
+
     activities.sort(key=lambda a: (a["date"], SPORT_ID.get(a["sport"], 9)))
-    return activities
+    return activities, activity_details
 
 
 def gen_daily_metrics_and_pmc(activities):
@@ -369,8 +468,10 @@ def gen_weekly_summary(activities):
 
 def main():
     DATA_DIR.mkdir(exist_ok=True)
+    detail_dir = DATA_DIR / "activities"
+    detail_dir.mkdir(exist_ok=True)
 
-    activities = gen_activities()
+    activities, activity_details = gen_activities()
     daily_metrics, pmc = gen_daily_metrics_and_pmc(activities)
     weekly_summary = gen_weekly_summary(activities)
 
@@ -379,12 +480,16 @@ def main():
     (DATA_DIR / "pmc.json").write_text(json.dumps(pmc, indent=2))
     (DATA_DIR / "weekly_summary.json").write_text(json.dumps(weekly_summary, indent=2))
 
+    for activity_id, detail in activity_details.items():
+        (detail_dir / f"{activity_id}.json").write_text(json.dumps(detail, indent=2))
+
     blocks_path = DATA_DIR / "blocks.json"
     if not blocks_path.exists():
         blocks_path.write_text(json.dumps([], indent=2))
 
     print(f"Generated {len(daily_metrics)} days of daily_metrics -> data/daily_metrics.json")
     print(f"Generated {len(activities)} activities -> data/activities.json")
+    print(f"Generated {len(activity_details)} per-activity detail files -> data/activities/")
     print(f"Generated {len(pmc)} days of PMC -> data/pmc.json")
     print(f"Generated {len(weekly_summary)} weekly_summary rows -> data/weekly_summary.json")
     print("data/blocks.json ready (empty array if not already present)")

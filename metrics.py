@@ -64,7 +64,16 @@ def compute_decoupling(records: list[dict], min_duration_s: int = 3600) -> dict 
     if len(usable) < 20:  # not enough clean samples to trust a split
         return None
 
-    duration_s = len(usable)  # FIT records are ~1 Hz; good enough as a proxy
+    # Prefer real elapsed time from timestamps -- FIT records aren't guaranteed
+    # 1 Hz (smart recording can skip samples, and our own fake-data generator
+    # samples every 5s), so treating record COUNT as seconds silently
+    # under-counts duration whenever the sample rate isn't exactly 1 Hz.
+    first_ts = usable[0].get("timestamp")
+    last_ts = usable[-1].get("timestamp")
+    if first_ts is not None and last_ts is not None and last_ts > first_ts:
+        duration_s = last_ts - first_ts
+    else:
+        duration_s = len(usable)  # no timestamps available; assume ~1 Hz
     if duration_s < min_duration_s:
         return None
 

@@ -18,10 +18,13 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from session_analysis import build_progression_verdict, compute_activity_metrics
+
 load_dotenv()
 
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
+DETAIL_DIR = DATA_DIR / "activities"
 STATIC_DIR = BASE_DIR / "static"
 MODEL = "claude-sonnet-4-6"
 
@@ -45,6 +48,41 @@ def get_daily_metrics():
 @app.get("/api/activities")
 def get_activities():
     return load_json("activities.json")
+
+
+def load_activity_detail(activity_id: int) -> dict:
+    path = DETAIL_DIR / f"{activity_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"no detail file for activity {activity_id}")
+    return json.loads(path.read_text())
+
+
+def find_activity(activity_id: int) -> dict:
+    for a in load_json("activities.json"):
+        if a.get("id") == activity_id:
+            return a
+    raise HTTPException(status_code=404, detail=f"activity {activity_id} not found")
+
+
+@app.get("/api/activities/{activity_id}")
+def get_activity_detail(activity_id: int):
+    activity = find_activity(activity_id)
+    detail = load_activity_detail(activity_id)
+    computed = compute_activity_metrics(activity, detail)
+    return {
+        "activity": activity,
+        "details": detail.get("details", {}),
+        "laps": detail.get("laps", []),
+        "records": detail.get("records", []),
+        "computed": computed,
+    }
+
+
+@app.get("/api/activities/{activity_id}/comparable")
+def get_activity_comparable(activity_id: int):
+    activity = find_activity(activity_id)
+    all_activities = load_json("activities.json")
+    return build_progression_verdict(activity, all_activities, load_activity_detail)
 
 
 @app.get("/api/pmc")

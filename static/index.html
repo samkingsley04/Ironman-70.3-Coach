@@ -12,7 +12,7 @@
       <div class="sidebar-brand">Coach Dashboard</div>
       <div class="nav-item active" data-page="overview"><span class="nav-icon">&#9679;</span> Overview</div>
       <div class="nav-item" data-page="training-load"><span class="nav-icon">&#9650;</span> Training Load</div>
-      <div class="nav-item" data-page="activities"><span class="nav-icon">&#9635;</span> Activities</div>
+      <div class="nav-item" data-page="activities"><span class="nav-icon">&#9635;</span> Sessions</div>
       <div class="nav-item" data-page="coach-chat"><span class="nav-icon">&#9998;</span> Coach Chat</div>
       <div class="sidebar-footer">Sunshine Coast 70.3<br />Sept 2027 build</div>
     </nav>
@@ -110,11 +110,11 @@
         </div>
       </section>
 
-      <!-- ACTIVITIES -->
+      <!-- SESSIONS -->
       <section class="page" id="page-activities">
-        <div class="panel">
+        <div class="panel" id="sessions-list-view">
           <div class="panel-title">
-            <span>Recent Workouts</span>
+            <span>Sessions</span>
             <span class="sub" id="activities-count"></span>
           </div>
           <div style="overflow-x:auto">
@@ -127,11 +127,56 @@
                   <th>Duration</th>
                   <th>Distance</th>
                   <th>TSS / IF</th>
+                  <th>NP / Pace</th>
                   <th>Avg HR</th>
                 </tr>
               </thead>
               <tbody></tbody>
             </table>
+          </div>
+        </div>
+
+        <div id="session-detail-view" style="display:none">
+          <button class="btn" id="session-back-btn" style="margin-bottom:16px">&larr; Back to Sessions</button>
+
+          <div class="panel">
+            <div class="panel-title">
+              <span id="session-detail-title">Session</span>
+              <span class="sub" id="session-detail-date"></span>
+            </div>
+            <div class="stat-grid" id="session-detail-stats"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-title">Power / Pace &amp; Heart Rate</div>
+            <div id="session-chart"></div>
+          </div>
+
+          <div class="chart-grid">
+            <div class="panel" id="session-intervals-panel">
+              <div class="panel-title">Per-Interval Detail</div>
+              <div style="overflow-x:auto">
+                <table class="data-table" id="session-intervals-table">
+                  <thead>
+                    <tr>
+                      <th>Rep</th>
+                      <th>Duration</th>
+                      <th>Avg Power/Pace</th>
+                      <th>Avg HR</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div id="session-rep-fade" class="stat-sub" style="margin-top:10px"></div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-title">Progression Verdict</div>
+              <div id="session-verdict"></div>
+              <div class="panel-title" style="margin-top:18px;font-size:12px">Comparable Sessions</div>
+              <div id="session-comparable"></div>
+            </div>
           </div>
         </div>
       </section>

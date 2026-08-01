@@ -372,6 +372,67 @@ table.data-table tbody tr:hover {
   margin-top: 4px;
 }
 
+/* ---------- Sessions page ---------- */
+
+.verdict-box {
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.verdict-label {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+
+.verdict-box.verdict-progress { border-color: var(--good); }
+.verdict-box.verdict-progress .verdict-label { color: var(--good); }
+.verdict-box.verdict-hold { border-color: var(--warn); }
+.verdict-box.verdict-hold .verdict-label { color: var(--warn); }
+.verdict-box.verdict-stale { border-color: var(--bad); }
+.verdict-box.verdict-stale .verdict-label { color: var(--bad); }
+.verdict-box.verdict-insufficient_data { border-color: var(--text-faint); }
+.verdict-box.verdict-insufficient_data .verdict-label { color: var(--text-faint); }
+
+.verdict-reason {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.verdict-rule {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 8px;
+  font-family: monospace;
+}
+
+.comparable-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.comparable-item:last-child {
+  border-bottom: none;
+}
+
+.comparable-item:hover {
+  color: var(--accent);
+}
+
+.comparable-item .date {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
 /* ---------- Training load page ---------- */
 
 .range-controls {

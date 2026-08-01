@@ -346,7 +346,7 @@ function renderTrainingLoad() {
 }
 
 // ---------------------------------------------------------------------------
-// Activities page
+// Sessions page — list
 // ---------------------------------------------------------------------------
 
 function renderActivities() {
@@ -356,9 +356,12 @@ function renderActivities() {
   const tbody = document.querySelector("#activities-table tbody");
   tbody.innerHTML = "";
 
-  acts.forEach((a, i) => {
+  acts.forEach((a) => {
     const row = document.createElement("tr");
     row.className = "activity-row";
+    const npOrPace = a.sport === "bike"
+      ? (a.normalized_power ? `${a.normalized_power} W` : "&mdash;")
+      : (a.avg_pace || "&mdash;");
     row.innerHTML = `
       <td>${fmtDate(a.date)}</td>
       <td><span class="sport-tag ${a.sport}"><span class="sport-dot ${a.sport}"></span>${a.sport}</span></td>
@@ -366,33 +369,158 @@ function renderActivities() {
       <td>${a.duration_min} min</td>
       <td>${a.distance_km ? round1(a.distance_km) + " km" : "&mdash;"}</td>
       <td>${round1(a.tss)} / ${a.if}</td>
-      <td>${a.avg_hr} bpm</td>
+      <td>${npOrPace}</td>
+      <td>${a.avg_hr ? a.avg_hr + " bpm" : "&mdash;"}</td>
     `;
-    const detail = document.createElement("tr");
-    detail.className = "activity-detail";
-    detail.style.display = "none";
-    detail.innerHTML = `
-      <td colspan="7">
-        <div class="activity-detail-grid">
-          <div class="activity-detail-field"><div class="label">Date</div><div class="value">${fmtDateFull(a.date)}</div></div>
-          <div class="activity-detail-field"><div class="label">TSS</div><div class="value">${round1(a.tss)}</div></div>
-          <div class="activity-detail-field"><div class="label">Intensity Factor</div><div class="value">${a.if}</div></div>
-          <div class="activity-detail-field"><div class="label">Training Load</div><div class="value">${a.training_load}</div></div>
-          ${a.avg_power ? `<div class="activity-detail-field"><div class="label">Avg Power</div><div class="value">${a.avg_power} W</div></div>` : ""}
-          ${a.normalized_power ? `<div class="activity-detail-field"><div class="label">Normalized Power</div><div class="value">${a.normalized_power} W</div></div>` : ""}
-          ${a.avg_pace ? `<div class="activity-detail-field"><div class="label">Avg Pace</div><div class="value">${a.avg_pace}</div></div>` : ""}
-          <div class="activity-detail-field"><div class="label">Avg HR</div><div class="value">${a.avg_hr} bpm</div></div>
-          <div class="activity-detail-field"><div class="label">Kudos</div><div class="value">&#128077; ${a.strava_kudos}</div></div>
-          <div class="activity-desc">&ldquo;${a.description}&rdquo;</div>
-        </div>
-      </td>
-    `;
-    row.addEventListener("click", () => {
-      detail.style.display = detail.style.display === "none" ? "table-row" : "none";
-    });
+    row.addEventListener("click", () => openSessionDetail(a.id));
     tbody.appendChild(row);
-    tbody.appendChild(detail);
   });
+}
+
+// ---------------------------------------------------------------------------
+// Sessions page — detail (drill-down)
+// ---------------------------------------------------------------------------
+
+function fmtSpeedAsPace(mps, sport) {
+  if (!mps) return "&mdash;";
+  if (sport === "swim") {
+    const secPer100 = 100 / mps;
+    return `${Math.floor(secPer100 / 60)}:${String(Math.round(secPer100 % 60)).padStart(2, "0")}/100m`;
+  }
+  const secPerKm = 1000 / mps;
+  return `${Math.floor(secPerKm / 60)}:${String(Math.round(secPerKm % 60)).padStart(2, "0")}/km`;
+}
+
+function verdictLabel(v) {
+  return { progress: "Ready to Progress", hold: "Hold", stale: "Stale — Change Stimulus", insufficient_data: "Not Enough Data" }[v] || v;
+}
+
+/** Two stacked mini line charts (output, HR) sharing an x-axis of elapsed minutes,
+ * with vertical lap-boundary markers. */
+function sessionChartSVG(records, laps, sport) {
+  const isBike = sport === "bike";
+  const outputKey = isBike ? "power" : "enhanced_speed";
+  const times = records.map((r) => (r.timestamp || 0) / 60);
+  const outputs = records.map((r) => r[outputKey]);
+  const hrs = records.map((r) => r.heart_rate);
+
+  const labels = times.map((t) => `${round1(t)}m`);
+  const outputChart = lineChartSVG(
+    [{ name: isBike ? "Power (W)" : "Speed", color: SPORT_COLOR[sport] || "#3b82f6", values: outputs }],
+    labels,
+    { height: 100 }
+  );
+  const hrChart = lineChartSVG(
+    [{ name: "HR", color: "#ef4444", values: hrs }],
+    labels,
+    { height: 90 }
+  );
+
+  return `
+    <div style="margin-bottom:6px;font-size:11px;color:var(--text-faint)">${isBike ? "Power (W)" : "Speed"}</div>
+    ${outputChart}
+    <div style="margin:10px 0 6px;font-size:11px;color:var(--text-faint)">Heart Rate (bpm)</div>
+    ${hrChart}
+  `;
+}
+
+async function openSessionDetail(id) {
+  document.getElementById("sessions-list-view").style.display = "none";
+  document.getElementById("session-detail-view").style.display = "block";
+
+  const [detail, comparable] = await Promise.all([
+    fetchJSON(`/api/activities/${id}`),
+    fetchJSON(`/api/activities/${id}/comparable`),
+  ]);
+  const a = detail.activity;
+  const computed = detail.computed;
+
+  document.getElementById("session-detail-title").textContent = a.name;
+  document.getElementById("session-detail-date").textContent = `${fmtDateFull(a.date)} · ${a.sport}`;
+
+  const efDisplay = computed.ef ? round1(computed.ef * 100) / 100 : "&mdash;";
+  const decouplingDisplay = computed.decoupling
+    ? `${computed.decoupling.decoupling_pct}% ${computed.decoupling.aerobically_sound ? "(sound)" : "(not settled)"}`
+    : "n/a (session too short/steady-only metric)";
+  const durabilityDisplay = computed.durability ? `${computed.durability.fade_pct}%` : "&mdash;";
+
+  document.getElementById("session-detail-stats").innerHTML = [
+    { label: "TSS", value: round1(a.tss) },
+    { label: "IF", value: a.if },
+    { label: a.sport === "bike" ? "Normalized Power" : "Avg Pace", value: a.sport === "bike" ? `${a.normalized_power || "&mdash;"} W` : (a.avg_pace || "&mdash;") },
+    { label: "Avg HR", value: a.avg_hr ? `${a.avg_hr} bpm` : "&mdash;" },
+    { label: "Efficiency Factor", value: efDisplay },
+    { label: "Decoupling", value: decouplingDisplay, small: true },
+    { label: "Durability (final vs first 1/3)", value: durabilityDisplay },
+  ].map((s) => `
+    <div class="stat-card">
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-value" style="${s.small ? "font-size:15px" : ""}">${s.value}</div>
+    </div>
+  `).join("");
+
+  document.getElementById("session-chart").innerHTML = detail.records.length
+    ? sessionChartSVG(detail.records, detail.laps, a.sport)
+    : `<div class="chat-empty" style="margin:0">No time-series stream for this session (likely a manual entry with no device file).</div>`;
+
+  const intervalsPanel = document.getElementById("session-intervals-panel");
+  const repFadeEl = document.getElementById("session-rep-fade");
+  if (detail.laps.length > 1) {
+    intervalsPanel.style.display = "block";
+    const tbody = document.querySelector("#session-intervals-table tbody");
+    tbody.innerHTML = detail.laps.map((lap, i) => {
+      const outputVal = a.sport === "bike"
+        ? (lap.avg_power ? `${lap.avg_power} W (NP ${lap.normalized_power || "&mdash;"})` : "&mdash;")
+        : fmtSpeedAsPace(lap.enhanced_avg_speed, a.sport);
+      const durationMin = round1((lap.total_elapsed_time || 0) / 60);
+      return `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${durationMin} min</td>
+          <td>${outputVal}</td>
+          <td>${lap.avg_heart_rate ? lap.avg_heart_rate + " bpm" : "&mdash;"}</td>
+        </tr>
+      `;
+    }).join("");
+
+    if (computed.rep_fade) {
+      const rf = computed.rep_fade;
+      repFadeEl.innerHTML = rf.faded
+        ? `<span class="stat-bad">Faded ${Math.abs(rf.fade_pct)}% from rep 1 to the last rep.</span>`
+        : `<span class="stat-good">Held steady across reps (${rf.fade_pct}% change).</span>`;
+    } else {
+      repFadeEl.innerHTML = "";
+    }
+  } else {
+    intervalsPanel.style.display = "none";
+  }
+
+  const verdict = comparable.verdict;
+  document.getElementById("session-verdict").innerHTML = `
+    <div class="verdict-box verdict-${verdict.verdict}">
+      <div class="verdict-label">${verdictLabel(verdict.verdict)}</div>
+      <div class="verdict-reason">${verdict.reason}</div>
+      <div class="verdict-rule">rule: ${verdict.rule_applied}</div>
+    </div>
+  `;
+
+  const comparableEl = document.getElementById("session-comparable");
+  comparableEl.innerHTML = comparable.comparable_sessions.length
+    ? comparable.comparable_sessions.map((c) => `
+        <div class="comparable-item" data-id="${c.id}">
+          <span>${c.name}</span>
+          <span class="date">${fmtDate(c.date)}</span>
+        </div>
+      `).join("")
+    : `<div class="stat-sub">No prior comparable sessions found yet.</div>`;
+  comparableEl.querySelectorAll(".comparable-item").forEach((el) => {
+    el.addEventListener("click", () => openSessionDetail(parseInt(el.dataset.id, 10)));
+  });
+}
+
+function backToSessionsList() {
+  document.getElementById("session-detail-view").style.display = "none";
+  document.getElementById("sessions-list-view").style.display = "block";
 }
 
 // ---------------------------------------------------------------------------
@@ -402,7 +530,7 @@ function renderActivities() {
 const PAGE_TITLES = {
   overview: "Overview",
   "training-load": "Training Load",
-  activities: "Activities",
+  activities: "Sessions",
   "coach-chat": "Coach Chat",
 };
 
@@ -411,6 +539,7 @@ function setActivePage(page) {
   document.querySelectorAll(".page").forEach((el) => el.classList.toggle("active", el.id === `page-${page}`));
   document.getElementById("page-title").textContent = PAGE_TITLES[page];
   if (page === "coach-chat") openChat();
+  if (page === "activities") backToSessionsList();
 }
 
 function initNav() {
@@ -552,6 +681,7 @@ async function init() {
   initChat();
   initSync();
   initPmcRangeControls();
+  document.getElementById("session-back-btn").addEventListener("click", backToSessionsList);
   await syncAndRenderAll();
 }
 
