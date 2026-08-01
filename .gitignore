@@ -3,3 +3,12 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Real personal training/health data (once trainingpeaks_sync.py has run for
+# real, these stop being synthetic sample data). Keep them local-only.
+data/activities/
+data/daily_metrics.json
+data/activities.json
+data/pmc.json
+data/weekly_summary.json
+data/thresholds.json
