@@ -466,6 +466,34 @@ def gen_weekly_summary(activities):
     return rows
 
 
+def gen_planned_sessions():
+    """A handful of fake upcoming sessions so the Plan page has something to
+    show in dev -- real plans only ever come from the Coach Chat write-back
+    tool, this is purely a local-testing seed."""
+    templates = [
+        ("bike", "Endurance Ride", 75, 65, 0.72),
+        ("run", "Easy Run", 45, 40, 0.70),
+        ("swim", "Technique Swim", 50, 35, 0.68),
+        ("bike", "Threshold Intervals", 70, 85, 0.88),
+        ("run", "Long Run", 90, 95, 0.78),
+        ("strength", "Core & Stability", 30, None, None),
+    ]
+    sessions = []
+    for i, (sport, name, duration, tss, if_) in enumerate(templates):
+        d = TODAY + timedelta(days=i)
+        sessions.append({
+            "date": d.isoformat(),
+            "sport": sport,
+            "name": name,
+            "target_duration_min": duration,
+            "target_tss": tss,
+            "target_if": if_,
+            "description": f"Placeholder planned session ({name.lower()}) for local testing.",
+            "status": "planned",
+        })
+    return sessions
+
+
 def main():
     DATA_DIR.mkdir(exist_ok=True)
     detail_dir = DATA_DIR / "activities"
@@ -486,6 +514,10 @@ def main():
     blocks_path = DATA_DIR / "blocks.json"
     if not blocks_path.exists():
         blocks_path.write_text(json.dumps([], indent=2))
+
+    planned_path = DATA_DIR / "planned_sessions.json"
+    if not planned_path.exists():
+        planned_path.write_text(json.dumps(gen_planned_sessions(), indent=2))
 
     print(f"Generated {len(daily_metrics)} days of daily_metrics -> data/daily_metrics.json")
     print(f"Generated {len(activities)} activities -> data/activities.json")

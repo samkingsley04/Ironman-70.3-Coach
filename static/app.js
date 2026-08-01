@@ -15,6 +15,7 @@ const state = {
   blocks: [],
   today: null,
   progression: null,
+  plan: null,
   chatHistory: [], // [{role, content}]
 };
 
@@ -29,7 +30,7 @@ async function fetchJSON(url) {
 }
 
 async function loadAllData() {
-  const [dailyMetrics, activities, pmc, weeklySummary, blocks, today, progression] = await Promise.all([
+  const [dailyMetrics, activities, pmc, weeklySummary, blocks, today, progression, plan] = await Promise.all([
     fetchJSON("/api/daily-metrics"),
     fetchJSON("/api/activities"),
     fetchJSON("/api/pmc"),
@@ -37,6 +38,7 @@ async function loadAllData() {
     fetchJSON("/api/blocks"),
     fetchJSON("/api/today"),
     fetchJSON("/api/progression"),
+    fetchJSON("/api/plan"),
   ]);
   state.dailyMetrics = dailyMetrics;
   state.activities = activities;
@@ -45,6 +47,7 @@ async function loadAllData() {
   state.blocks = blocks;
   state.today = today;
   state.progression = progression;
+  state.plan = plan;
 }
 
 // ---------------------------------------------------------------------------
@@ -354,9 +357,36 @@ function renderTodayIntensity() {
   `;
 }
 
+function plannedSessionCardHTML(session) {
+  if (!session) {
+    return `Nothing planned for today yet &mdash; ask your coach to plan a session and it'll show up here.`;
+  }
+  const targetBits = [
+    session.target_duration_min ? `${session.target_duration_min} min` : null,
+    session.target_tss ? `TSS ${round1(session.target_tss)}` : null,
+    session.target_if ? `IF ${session.target_if}` : null,
+  ].filter(Boolean).join(" &middot; ");
+  return `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span class="sport-tag ${session.sport}"><span class="sport-dot ${session.sport}"></span>${session.sport}</span>
+      <span class="stat-value" style="font-size:16px">${session.name}</span>
+    </div>
+    <div class="stat-sub">${targetBits}</div>
+    ${session.description ? `<div class="activity-desc" style="margin-top:6px">${session.description}</div>` : ""}
+  `;
+}
+
+function renderTodayPlannedSession() {
+  const el = document.getElementById("today-planned-session");
+  const session = state.today?.planned_session;
+  el.classList.toggle("chat-empty", !session);
+  el.innerHTML = plannedSessionCardHTML(session);
+}
+
 function renderOverview() {
   renderHealthStrip();
   renderTodayWhereIAm();
+  renderTodayPlannedSession();
   renderTodayDiscipline();
   renderTodayIntensity();
 }
@@ -514,6 +544,49 @@ function renderProgression() {
   renderProgressionThresholds();
   renderProgressionRacePace();
   renderTrainingLoad(); // PMC + blocks + weekly TSS, folded in from the old Training Load page
+}
+
+// ---------------------------------------------------------------------------
+// Plan page
+// ---------------------------------------------------------------------------
+
+function renderPlanUpcoming() {
+  const upcoming = state.plan?.upcoming || [];
+  const tbody = document.querySelector("#plan-upcoming-table tbody");
+  tbody.innerHTML = upcoming.length
+    ? upcoming.map((s) => `
+        <tr>
+          <td>${fmtDate(s.date)}</td>
+          <td><span class="sport-tag ${s.sport}"><span class="sport-dot ${s.sport}"></span>${s.sport}</span></td>
+          <td>${s.name}</td>
+          <td>${s.target_duration_min ? s.target_duration_min + " min" : "&mdash;"}</td>
+          <td>${s.target_tss ? round1(s.target_tss) : "&mdash;"} / ${s.target_if ?? "&mdash;"}</td>
+          <td>${s.description || ""}</td>
+        </tr>
+      `).join("")
+    : `<tr><td colspan="6" class="stat-sub">Nothing planned yet &mdash; ask your coach to lay out some sessions.</td></tr>`;
+}
+
+function renderPlanAdherence() {
+  const a = state.plan?.adherence;
+  if (!a) return;
+  document.getElementById("plan-adherence-sub").textContent = `last ${a.window_days} days`;
+  document.getElementById("plan-adherence-stats").innerHTML = [
+    { label: "Planned", value: a.planned_count },
+    { label: "Completed", value: a.completed_count },
+    { label: "Missed", value: a.missed_count },
+    { label: "Adherence", value: a.adherence_pct !== null ? `${a.adherence_pct}%` : "&mdash;" },
+  ].map((s) => `
+    <div class="stat-card">
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-value">${s.value}</div>
+    </div>
+  `).join("");
+}
+
+function renderPlan() {
+  renderPlanUpcoming();
+  renderPlanAdherence();
 }
 
 // ---------------------------------------------------------------------------
@@ -702,6 +775,7 @@ const PAGE_TITLES = {
   overview: "Today",
   progression: "Progression",
   activities: "Sessions",
+  plan: "Plan",
   "coach-chat": "Coach Chat",
 };
 
@@ -779,6 +853,14 @@ async function sendChatMessage(text) {
       assistantBubble.parentElement.scrollTop = assistantBubble.parentElement.scrollHeight;
     }
     state.chatHistory.push({ role: "assistant", content: full });
+
+    // The coach may have just written planned sessions via the write-back
+    // tool -- refresh so Plan/Today reflect it without a manual Sync click.
+    const [today, plan] = await Promise.all([fetchJSON("/api/today"), fetchJSON("/api/plan")]);
+    state.today = today;
+    state.plan = plan;
+    renderTodayPlannedSession();
+    renderPlan();
   } catch (err) {
     assistantBubble.textContent = `Error reaching the coach: ${err.message}`;
   } finally {
@@ -817,6 +899,7 @@ async function syncAndRenderAll() {
   await loadAllData();
   renderOverview();
   renderProgression();
+  renderPlan();
   renderActivities();
 }
 

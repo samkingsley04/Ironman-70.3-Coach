@@ -11,8 +11,9 @@
     <nav class="sidebar">
       <div class="sidebar-brand">Coach Dashboard</div>
       <div class="nav-item active" data-page="overview"><span class="nav-icon">&#9679;</span> Today</div>
-      <div class="nav-item" data-page="progression"><span class="nav-icon">&#9650;</span> Progression</div>
       <div class="nav-item" data-page="activities"><span class="nav-icon">&#9635;</span> Sessions</div>
+      <div class="nav-item" data-page="progression"><span class="nav-icon">&#9650;</span> Progression</div>
+      <div class="nav-item" data-page="plan"><span class="nav-icon">&#9776;</span> Plan</div>
       <div class="nav-item" data-page="coach-chat"><span class="nav-icon">&#9998;</span> Coach Chat</div>
       <div class="sidebar-footer">Sunshine Coast 70.3<br />Sept 2027 build</div>
     </nav>
@@ -160,6 +161,40 @@
               <tbody></tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      <!-- PLAN -->
+      <section class="page" id="page-plan">
+        <div class="panel">
+          <div class="panel-title">Upcoming Sessions</div>
+          <div class="stat-sub" style="margin-bottom:10px">
+            Sessions here are written by Coach Chat &mdash; ask your coach to plan a workout or lay out a
+            block and it'll show up here.
+          </div>
+          <div style="overflow-x:auto">
+            <table class="data-table" id="plan-upcoming-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Sport</th>
+                  <th>Name</th>
+                  <th>Target Duration</th>
+                  <th>Target TSS / IF</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <span>Adherence</span>
+            <span class="sub" id="plan-adherence-sub"></span>
+          </div>
+          <div class="stat-grid" id="plan-adherence-stats"></div>
         </div>
       </section>
 
