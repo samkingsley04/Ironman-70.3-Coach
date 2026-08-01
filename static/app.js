@@ -13,6 +13,7 @@ const state = {
   pmc: [],
   weeklySummary: [],
   blocks: [],
+  today: null,
   chatHistory: [], // [{role, content}]
 };
 
@@ -27,18 +28,20 @@ async function fetchJSON(url) {
 }
 
 async function loadAllData() {
-  const [dailyMetrics, activities, pmc, weeklySummary, blocks] = await Promise.all([
+  const [dailyMetrics, activities, pmc, weeklySummary, blocks, today] = await Promise.all([
     fetchJSON("/api/daily-metrics"),
     fetchJSON("/api/activities"),
     fetchJSON("/api/pmc"),
     fetchJSON("/api/weekly-summary"),
     fetchJSON("/api/blocks"),
+    fetchJSON("/api/today"),
   ]);
   state.dailyMetrics = dailyMetrics;
   state.activities = activities;
   state.pmc = pmc;
   state.weeklySummary = weeklySummary;
   state.blocks = blocks;
+  state.today = today;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,14 +60,6 @@ function fmtDateFull(iso) {
 
 function round1(n) {
   return Math.round(n * 10) / 10;
-}
-
-function statusClass(status) {
-  if (["Productive", "Peaking", "Maintaining"].includes(status)) return "stat-good";
-  if (["Recovery"].includes(status)) return "stat-good";
-  if (["Overreaching"].includes(status)) return "stat-warn";
-  if (["Detraining", "Unproductive"].includes(status)) return "stat-bad";
-  return "";
 }
 
 // ---------------------------------------------------------------------------
@@ -177,106 +172,120 @@ function stackedBarSVG(weeks, seriesKeys, colors, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Overview page
+// Today page
 // ---------------------------------------------------------------------------
 
-function renderOverviewStats() {
+function renderHealthStrip() {
   const latest = state.dailyMetrics[state.dailyMetrics.length - 1];
-  const prev = state.dailyMetrics[state.dailyMetrics.length - 2] || latest;
+  if (!latest) return;
+  // Deliberately plain: no color-coding, no thresholds, no recommendations.
+  // The athlete reads their own body; this is just a reference line.
+  document.getElementById("health-strip").innerHTML = `
+    <span>Resting HR <b>${latest.resting_hr ?? "&mdash;"}</b> bpm</span>
+    <span>HRV <b>${latest.hrv_ms ?? "&mdash;"}</b> ms</span>
+    <span>Sleep <b>${latest.sleep_hours ?? "&mdash;"}</b> hrs</span>
+    <span>Body Battery <b>${latest.body_battery ?? "&mdash;"}</b></span>
+  `;
+}
 
-  const thisWeekActs = weeksAgoActivities(0);
-  const weekTss = round1(thisWeekActs.reduce((s, a) => s + a.tss, 0));
-  const weekHours = round1(thisWeekActs.reduce((s, a) => s + a.duration_min, 0) / 60);
+function renderTodayWhereIAm() {
+  const t = state.today;
+  if (!t) return;
 
-  const cards = [
-    { label: "Training Readiness", value: latest.training_readiness, unit: "/100", cls: latest.training_readiness >= 60 ? "stat-good" : latest.training_readiness >= 35 ? "stat-warn" : "stat-bad" },
-    { label: "HRV", value: latest.hrv_ms, unit: "ms", cls: latest.hrv_ms >= prev.hrv_ms ? "stat-good" : "" },
-    { label: "Resting HR", value: latest.resting_hr, unit: "bpm", cls: latest.resting_hr <= prev.resting_hr ? "stat-good" : "" },
-    { label: "Sleep", value: latest.sleep_hours, unit: "hrs", sub: `score ${latest.sleep_score}` },
-    { label: "Training Status", value: latest.training_status, cls: statusClass(latest.training_status), isText: true },
-    { label: "VO2max Running", value: latest.vo2max_running, unit: "" },
-    { label: "VO2max Cycling", value: latest.vo2max_cycling, unit: "" },
-    { label: "This Week TSS", value: weekTss, unit: "" },
-    { label: "This Week Hours", value: weekHours, unit: "h" },
-  ];
+  const block = t.current_block;
+  document.getElementById("today-block-title").textContent = block
+    ? block.name
+    : "Where I Am (no active block configured yet)";
 
-  const el = document.getElementById("overview-stats");
-  el.innerHTML = cards.map((c) => `
+  const days = t.days_to_race;
+  document.getElementById("today-race-countdown").textContent =
+    `${days >= 0 ? days : Math.abs(days)} days ${days >= 0 ? "to" : "since"} ${t.goal_race.name}`;
+
+  const pmc = t.pmc || {};
+  const ramp = t.ramp_rate || {};
+
+  document.getElementById("today-stats").innerHTML = [
+    { label: "CTL (Fitness)", value: pmc.ctl ?? "&mdash;" },
+    { label: "ATL (Fatigue)", value: pmc.atl ?? "&mdash;" },
+    { label: "TSB (Form)", value: pmc.tsb ?? "&mdash;" },
+    { label: "Ramp Rate", value: ramp.weekly_ctl_change != null ? `${ramp.weekly_ctl_change}/wk` : "&mdash;" },
+  ].map((s) => `
     <div class="stat-card">
-      <div class="stat-label">${c.label}</div>
-      <div class="stat-value ${c.cls || ""}" style="${c.isText ? "font-size:17px" : ""}">${c.value}<span class="stat-unit">${c.unit || ""}</span></div>
-      ${c.sub ? `<div class="stat-sub">${c.sub}</div>` : ""}
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-value">${s.value}</div>
     </div>
   `).join("");
+
+  document.getElementById("today-ramp-reading").textContent = ramp.reading
+    ? `Ramp rate reading: ${ramp.reading}`
+    : "";
 }
 
-function weeksAgoActivities(weeksAgo) {
-  const today = new Date(state.dailyMetrics[state.dailyMetrics.length - 1].date + "T00:00:00");
-  const dow = (today.getDay() + 6) % 7; // Monday=0
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - dow - weeksAgo * 7);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  return state.activities.filter((a) => {
-    const d = new Date(a.date + "T00:00:00");
-    return d >= monday && d <= sunday;
-  });
-}
+function renderTodayDiscipline() {
+  const db = state.today?.discipline_balance;
+  const el = document.getElementById("today-discipline");
+  if (!db) { el.innerHTML = ""; return; }
 
-function renderOverviewTrends() {
-  const last30 = state.dailyMetrics.slice(-30);
-  const labels = last30.map((d) => fmtDate(d.date));
+  const sports = Object.keys(db.target_split);
+  document.getElementById("today-discipline-sub").textContent = `last ${db.last_n_weeks} weeks`;
 
-  const metrics = [
-    { key: "resting_hr", name: "Resting HR", color: "#f97316" },
-    { key: "hrv_ms", name: "HRV (ms)", color: "#22d3ee" },
-    { key: "sleep_hours", name: "Sleep (hrs)", color: "#a78bfa" },
-    { key: "body_battery", name: "Body Battery", color: "#22c55e" },
-    { key: "stress_avg", name: "Stress", color: "#ef4444" },
-    { key: "steps", name: "Steps", color: "#3b82f6" },
-  ];
-
-  const el = document.getElementById("overview-trends");
-  el.innerHTML = metrics.map((m) => {
-    const values = last30.map((d) => d[m.key]);
-    const chart = lineChartSVG([{ name: m.name, color: m.color, values }], labels, { height: 110 });
-    return `<div><div class="panel-title" style="font-size:12px;margin-bottom:4px">${m.name}</div>${chart}</div>`;
+  el.innerHTML = sports.map((sport) => {
+    const actual = (db.actual_split[sport] || 0) * 100;
+    const target = db.target_split[sport] * 100;
+    const delta = (db.deltas[sport] || 0) * 100;
+    const totals = db.totals[sport] || { hours: 0, tss: 0 };
+    const isFurthestBelow = db.furthest_below_target === sport;
+    const deltaClass = delta < -3 ? "stat-warn" : delta < 0 ? "stat-sub" : "stat-good";
+    return `
+      <div class="discipline-row">
+        <div class="discipline-row-header">
+          <span class="sport-tag ${sport}"><span class="sport-dot ${sport}"></span>${sport}${isFurthestBelow ? " &mdash; furthest below target" : ""}</span>
+          <span>${round1(totals.hours)}h &middot; ${round1(totals.tss)} TSS</span>
+        </div>
+        <div class="discipline-bar-track">
+          <div class="discipline-bar-fill" style="width:${Math.min(actual, 100)}%;background:${SPORT_COLOR[sport] || "#3b82f6"}"></div>
+          <div class="discipline-bar-target" style="left:${Math.min(target, 100)}%"></div>
+        </div>
+        <div class="discipline-delta ${deltaClass}">${round1(actual)}% actual vs ${round1(target)}% target (${delta >= 0 ? "+" : ""}${round1(delta)}pp)</div>
+      </div>
+    `;
   }).join("");
 }
 
-function renderOverviewWeeklyVolume() {
-  const weeks = buildWeeklyVolumeSeries(8);
-  const el = document.getElementById("overview-weekly-volume");
-  el.innerHTML = stackedBarSVG(weeks, ["swim", "bike", "run", "strength"], SPORT_COLOR, { height: 170 });
-}
+function renderTodayIntensity() {
+  const dist = state.today?.intensity_distribution;
+  const el = document.getElementById("today-intensity");
+  if (!dist) { el.innerHTML = ""; return; }
 
-function buildWeeklyVolumeSeries(numWeeks) {
-  const byWeek = {};
-  state.weeklySummary.forEach((row) => {
-    if (!byWeek[row.week]) byWeek[row.week] = { week: row.week };
-    byWeek[row.week][row.sport] = row.hours;
-  });
-  const weekKeys = Object.keys(byWeek).sort();
-  const recent = weekKeys.slice(-numWeeks);
-  return recent.map((wk) => ({ ...byWeek[wk], label: fmtDate(wk) }));
-}
+  const model = dist.model;
+  document.getElementById("today-intensity-model-sub").textContent = `last 4 weeks vs ${model.name} model`;
 
-function renderOverviewPMC() {
-  const last90 = state.pmc.slice(-90);
-  const labels = last90.map((d) => fmtDate(d.date));
-  const series = [
-    { name: "CTL", color: "#22d3ee", values: last90.map((d) => d.ctl) },
-    { name: "ATL", color: "#f97316", values: last90.map((d) => d.atl) },
-    { name: "TSB", color: "#a78bfa", values: last90.map((d) => d.tsb) },
-  ];
-  document.getElementById("overview-pmc").innerHTML = lineChartSVG(series, labels, { height: 220 });
+  const sports = Object.keys(dist.by_sport);
+  el.innerHTML = sports.map((sport) => {
+    const d = dist.by_sport[sport];
+    return `
+      <div class="intensity-row">
+        <div class="intensity-row-header">${sport}</div>
+        <div class="intensity-bar">
+          ${d.easy_pct > 0 ? `<div class="intensity-segment easy" style="width:${d.easy_pct}%">${d.easy_pct}%</div>` : ""}
+          ${d.moderate_pct > 0 ? `<div class="intensity-segment moderate" style="width:${d.moderate_pct}%">${d.moderate_pct}%</div>` : ""}
+          ${d.hard_pct > 0 ? `<div class="intensity-segment hard" style="width:${d.hard_pct}%">${d.hard_pct}%</div>` : ""}
+        </div>
+      </div>
+    `;
+  }).join("") + `
+    <div class="intensity-model-note">
+      Chosen model: ${model.name} (~${model.easy_pct}% easy / ${model.hard_pct}% hard). Bucketed per-session from
+      overall IF (a proxy until real per-second zone time is wired in) &mdash; not asserted as the only valid model.
+    </div>
+  `;
 }
 
 function renderOverview() {
-  renderOverviewStats();
-  renderOverviewTrends();
-  renderOverviewWeeklyVolume();
-  renderOverviewPMC();
+  renderHealthStrip();
+  renderTodayWhereIAm();
+  renderTodayDiscipline();
+  renderTodayIntensity();
 }
 
 // ---------------------------------------------------------------------------
@@ -528,7 +537,7 @@ function backToSessionsList() {
 // ---------------------------------------------------------------------------
 
 const PAGE_TITLES = {
-  overview: "Overview",
+  overview: "Today",
   "training-load": "Training Load",
   activities: "Sessions",
   "coach-chat": "Coach Chat",

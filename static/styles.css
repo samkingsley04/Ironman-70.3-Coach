@@ -372,6 +372,105 @@ table.data-table tbody tr:hover {
   margin-top: 4px;
 }
 
+/* ---------- Today page ---------- */
+
+.health-strip {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.health-strip b {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.discipline-row {
+  margin-bottom: 16px;
+}
+
+.discipline-row:last-child {
+  margin-bottom: 0;
+}
+
+.discipline-row-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  margin-bottom: 6px;
+}
+
+.discipline-bar-track {
+  position: relative;
+  height: 10px;
+  background: var(--panel-2);
+  border-radius: 5px;
+  overflow: visible;
+}
+
+.discipline-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+}
+
+.discipline-bar-target {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 16px;
+  background: var(--text);
+  opacity: 0.6;
+}
+
+.discipline-delta {
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.intensity-row {
+  margin-bottom: 18px;
+}
+
+.intensity-row:last-child {
+  margin-bottom: 0;
+}
+
+.intensity-row-header {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  text-transform: capitalize;
+}
+
+.intensity-bar {
+  display: flex;
+  height: 20px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.intensity-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #04212a;
+}
+
+.intensity-segment.easy { background: var(--good); }
+.intensity-segment.moderate { background: var(--warn); }
+.intensity-segment.hard { background: var(--bad); color: #fff; }
+
+.intensity-model-note {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 16px;
+}
+
 /* ---------- Sessions page ---------- */
 
 .verdict-box {

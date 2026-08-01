@@ -10,7 +10,7 @@
   <div id="app">
     <nav class="sidebar">
       <div class="sidebar-brand">Coach Dashboard</div>
-      <div class="nav-item active" data-page="overview"><span class="nav-icon">&#9679;</span> Overview</div>
+      <div class="nav-item active" data-page="overview"><span class="nav-icon">&#9679;</span> Today</div>
       <div class="nav-item" data-page="training-load"><span class="nav-icon">&#9650;</span> Training Load</div>
       <div class="nav-item" data-page="activities"><span class="nav-icon">&#9635;</span> Sessions</div>
       <div class="nav-item" data-page="coach-chat"><span class="nav-icon">&#9998;</span> Coach Chat</div>
@@ -20,50 +20,46 @@
     <div class="main">
       <div class="topbar">
         <div>
-          <h1 id="page-title">Overview</h1>
+          <h1 id="page-title">Today</h1>
           <div class="date" id="page-date"></div>
+          <div class="health-strip" id="health-strip"></div>
         </div>
         <button class="btn" id="sync-btn">&#8635; Sync</button>
       </div>
 
-      <!-- OVERVIEW -->
+      <!-- TODAY -->
       <section class="page active" id="page-overview">
-        <div class="stat-grid" id="overview-stats"></div>
-
         <div class="panel">
           <div class="panel-title">
-            <span>30-Day Trends</span>
-            <span class="sub">resting HR &middot; HRV &middot; sleep &middot; body battery &middot; stress &middot; steps</span>
+            <span id="today-block-title">Where I Am</span>
+            <span class="sub" id="today-race-countdown"></span>
           </div>
-          <div class="chart-grid" id="overview-trends"></div>
+          <div class="stat-grid" id="today-stats"></div>
+          <div class="stat-sub" id="today-ramp-reading" style="margin-top:10px"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Planned Session</div>
+          <div id="today-planned-session" class="chat-empty" style="margin:0">
+            Not available yet &mdash; coming with the Plan page.
+          </div>
         </div>
 
         <div class="chart-grid">
           <div class="panel">
             <div class="panel-title">
-              <span>Weekly Volume by Sport</span>
-              <span class="sub">last 8 weeks, hours</span>
+              <span>Discipline Balance</span>
+              <span class="sub" id="today-discipline-sub">last 4 weeks</span>
             </div>
-            <div id="overview-weekly-volume"></div>
-            <div class="legend" style="margin-top:10px">
-              <span class="legend-item"><span class="legend-dot" style="background:var(--swim)"></span>Swim</span>
-              <span class="legend-item"><span class="legend-dot" style="background:var(--bike)"></span>Bike</span>
-              <span class="legend-item"><span class="legend-dot" style="background:var(--run)"></span>Run</span>
-              <span class="legend-item"><span class="legend-dot" style="background:var(--strength)"></span>Strength</span>
-            </div>
+            <div id="today-discipline"></div>
           </div>
 
           <div class="panel">
             <div class="panel-title">
-              <span>Performance Management (CTL / ATL / TSB)</span>
-              <span class="sub">last 90 days</span>
+              <span>Intensity Distribution</span>
+              <span class="sub" id="today-intensity-model-sub"></span>
             </div>
-            <div id="overview-pmc"></div>
-            <div class="legend" style="margin-top:10px">
-              <span class="legend-item"><span class="legend-dot" style="background:#22d3ee"></span>CTL (fitness)</span>
-              <span class="legend-item"><span class="legend-dot" style="background:#f97316"></span>ATL (fatigue)</span>
-              <span class="legend-item"><span class="legend-dot" style="background:#a78bfa"></span>TSB (form)</span>
-            </div>
+            <div id="today-intensity"></div>
           </div>
         </div>
       </section>

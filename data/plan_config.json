@@ -1,0 +1,17 @@
+{
+  "goal_race": {
+    "name": "Sunshine Coast 70.3",
+    "date": "2027-09-12",
+    "note": "Placeholder pending IRONMAN's official 2027 calendar (2026's race was Sept 13) -- update once announced."
+  },
+  "discipline_target_split": {
+    "swim": 0.15,
+    "bike": 0.50,
+    "run": 0.35
+  },
+  "intensity_model": {
+    "name": "polarized",
+    "easy_pct": 80,
+    "hard_pct": 20
+  }
+}

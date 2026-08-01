@@ -9,6 +9,7 @@ recent training data injected into the system prompt.
 
 import json
 import os
+from datetime import date
 from pathlib import Path
 
 import anthropic
@@ -19,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from session_analysis import build_progression_verdict, compute_activity_metrics
+from today_analysis import build_today_summary
 
 load_dotenv()
 
@@ -98,6 +100,17 @@ def get_weekly_summary():
 @app.get("/api/blocks")
 def get_blocks():
     return load_json("blocks.json")
+
+
+@app.get("/api/today")
+def get_today():
+    return build_today_summary(
+        blocks=load_json("blocks.json"),
+        pmc=load_json("pmc.json"),
+        activities=load_json("activities.json"),
+        plan_config=load_json("plan_config.json"),
+        today=date.today(),
+    )
 
 
 ATHLETE_CONTEXT = """You are an experienced elite endurance coach speaking directly with your athlete \
