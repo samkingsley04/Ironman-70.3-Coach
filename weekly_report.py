@@ -2,13 +2,12 @@
 Weekly training summary report.
 
 Reads the real synced data (data/activities.json, daily_metrics.json,
-pmc.json, thresholds.json) and produces a compact Markdown report for a
-trailing window -- meant to be pasted straight into a separate coaching
-conversation, not read in a browser. No charts, no server: just the facts
-a coach would want, computed the same way the rest of this project computes
-them (see metrics.py / today_analysis.py / session_analysis.py), so nothing
-about how EF/decoupling/durability/ramp-rate are derived changes -- only
-where the numbers end up.
+pmc.json) and produces a compact Markdown report for a trailing window --
+meant to be pasted straight into a separate coaching conversation, not read
+in a browser. Data only, no interpretation: raw numbers and computed
+metrics (TSS, EF, decoupling, durability, ramp rate), no readings, labels,
+or judgments layered on top -- see metrics.py / today_analysis.py /
+session_analysis.py for how each number is derived.
 
 Usage:
     python weekly_report.py                  # last 7 days ending today
@@ -113,14 +112,12 @@ def build_report(end: date, days: int = 7) -> str:
     activities = load_json("activities.json", [])
     daily_metrics = load_json("daily_metrics.json", [])
     pmc = load_json("pmc.json", [])
-    thresholds = load_json("thresholds.json", [])
 
     week_acts = sorted(week_activities(activities, start, end), key=lambda a: a.get("date", ""))
     by_sport = summarize_by_sport(week_acts)
     health = health_averages(daily_metrics, start, end)
     ramp = compute_ramp_rate(pmc)
     latest_pmc = pmc[-1] if pmc else None
-    latest_threshold = sorted(thresholds, key=lambda t: t.get("date", ""))[-1] if thresholds else None
 
     lines = [f"# Training Summary: {start.isoformat()} to {end.isoformat()}", ""]
 
@@ -143,10 +140,10 @@ def build_report(end: date, days: int = 7) -> str:
             f"TSB (form): {latest_pmc.get('tsb')}"
         )
     if ramp.get("weekly_ctl_change") is not None:
-        lines.append(f"- Ramp rate (trailing 4 weeks): {ramp['weekly_ctl_change']}/week -- {ramp['reading']}")
+        lines.append(f"- Ramp rate (trailing 4 weeks): {ramp['weekly_ctl_change']} CTL/week")
     lines.append("")
 
-    lines.append("## Health (weekly averages -- for reference, not judged)")
+    lines.append("## Health (weekly averages)")
     if health["days_with_data"]:
         lines.append(f"- Resting HR: {health['resting_hr']} bpm")
         lines.append(f"- HRV: {health['hrv_ms']} ms")
@@ -154,22 +151,6 @@ def build_report(end: date, days: int = 7) -> str:
         lines.append(f"- Body Battery: {health['body_battery']}")
     else:
         lines.append("- No health data logged this week.")
-    lines.append("")
-
-    lines.append("## Current thresholds")
-    if latest_threshold:
-        bits = []
-        if latest_threshold.get("ftp"):
-            bits.append(f"FTP {latest_threshold['ftp']}W")
-        if latest_threshold.get("threshold_hr"):
-            bits.append(f"threshold HR {latest_threshold['threshold_hr']}")
-        if latest_threshold.get("threshold_run_pace_per_km"):
-            bits.append(f"run threshold {latest_threshold['threshold_run_pace_per_km']}/km")
-        if latest_threshold.get("css_per_100m"):
-            bits.append(f"CSS {latest_threshold['css_per_100m']}/100m")
-        lines.append(f"- As of {latest_threshold['date']}: " + ", ".join(bits))
-    else:
-        lines.append("- No threshold data synced yet.")
     lines.append("")
 
     lines.append("## Sessions this week")
